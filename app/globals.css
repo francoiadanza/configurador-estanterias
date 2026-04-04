@@ -1,0 +1,32 @@
+/* app/globals.css */
+/* Resetea SOLO lo necesario — Tailwind se encarga del resto */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Evita que el body tenga fondo blanco forzado */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* Cursor grab para el canvas 3D */
+.cursor-grab { cursor: grab; }
+.cursor-grab:active,
+.active\:cursor-grabbing:active { cursor: grabbing; }
+
+/* Scrollbar fina y discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+*::-webkit-scrollbar { width: 4px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+
+/* Smooth transitions globales para select / input */
+select, input {
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
