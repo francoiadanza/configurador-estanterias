@@ -1,24 +1,31 @@
-// components/Estanteria3D.jsx
+// render3d/Estanteria3D.jsx
+// Origen: https://github.com/francoiadanza/configurador-estanterias
+// Adaptado para Mundo Estanterías — parante variable + refuerzos por kg
 import { useMemo } from 'react';
 import * as THREE from 'three';
 
 // ─── Dimensiones físicas FIJAS (metros) ──────────────────────────────────────
-const ANCHO         = 0.90;   // ancho total exterior
-const GROSOR_CHAPA  = 0.0025; // 2.5 mm — espesor de chapa real
-const PILAR_W       = 0.040;  // ancho de la cara frontal del pilar
-const PILAR_D       = 0.040;  // profundidad de la cara lateral del pilar
-const ESTANTE_T     = 0.014;  // espesor del estante (14 mm)
-const LABIO_H       = 0.028;  // altura del labio colgante del estante
-const LABIO_T       = 0.005;  // espesor del labio
-const BARRA_H       = 0.022;  // alto del travesaño rectangular
-const BARRA_T       = 0.012;  // profundidad del travesaño
-const PERF_H        = 0.012;  // alto de cada perforación oval
-const PERF_W        = 0.006;  // ancho de cada perforación oval
-const PERF_PASO     = 0.040;  // CADA 4 CM
+const ANCHO         = 0.90;
+const GROSOR_CHAPA  = 0.0025;
+const ESTANTE_T     = 0.014;
+const LABIO_H       = 0.028;
+const LABIO_T       = 0.005;
+const BARRA_H       = 0.022;
+const BARRA_T       = 0.012;
+const PERF_H        = 0.012;
+const PERF_W        = 0.006;
+const PERF_PASO     = 0.040;
 
-// NUEVAS MEDIDAS: Refuerzo central debajo del estante
-const REFUERZO_H    = 0.015;  // alto del nervio central (1.5 cm)
-const REFUERZO_T    = 0.030;  // ancho del nervio central (3 cm, plano y chato)
+// Refuerzo central debajo del estante
+const REFUERZO_H    = 0.015;
+const REFUERZO_T    = 0.030;
+
+// Parante sizes por tipo (metros)
+const PARANTE_DIMS = {
+  fino:        { w: 0.040, d: 0.040 },
+  grueso:      { w: 0.050, d: 0.050 },
+  industrial:  { w: 0.070, d: 0.070 },
+};
 
 // ─── Materiales ───────────────────────────────────────────────────────────────
 function useMats() {
@@ -45,7 +52,7 @@ function useMats() {
 }
 
 // ─── Pilar individual ─────────────────────────────────────────────────────────
-function Pilar({ posX, posZ, dirX, dirZ, alto, mats }) {
+function Pilar({ posX, posZ, dirX, dirZ, alto, pilarW, pilarD, mats }) {
   const { grafito, perfMat } = mats;
 
   const perfs = useMemo(() => {
@@ -60,21 +67,17 @@ function Pilar({ posX, posZ, dirX, dirZ, alto, mats }) {
 
   return (
     <group position={[posX, 0, posZ]}>
-      {/* Cara frontal */}
-      <mesh material={grafito} castShadow receiveShadow position={[0, alto / 2, dirZ * (PILAR_D / 2 - GROSOR_CHAPA / 2)]}>
-        <boxGeometry args={[PILAR_W, alto, GROSOR_CHAPA]} />
+      <mesh material={grafito} castShadow receiveShadow position={[0, alto / 2, dirZ * (pilarD / 2 - GROSOR_CHAPA / 2)]}>
+        <boxGeometry args={[pilarW, alto, GROSOR_CHAPA]} />
       </mesh>
-      {/* Ala interior */}
-      <mesh material={grafito} castShadow receiveShadow position={[dirX * (PILAR_W / 2 - GROSOR_CHAPA / 2), alto / 2, 0]}>
-        <boxGeometry args={[GROSOR_CHAPA, alto, PILAR_D]} />
+      <mesh material={grafito} castShadow receiveShadow position={[dirX * (pilarW / 2 - GROSOR_CHAPA / 2), alto / 2, 0]}>
+        <boxGeometry args={[GROSOR_CHAPA, alto, pilarD]} />
       </mesh>
-      {/* Ala trasera */}
-      <mesh material={grafito} castShadow receiveShadow position={[0, alto / 2, -dirZ * (PILAR_D / 2 - GROSOR_CHAPA / 2)]}>
-        <boxGeometry args={[PILAR_W, alto, GROSOR_CHAPA]} />
+      <mesh material={grafito} castShadow receiveShadow position={[0, alto / 2, -dirZ * (pilarD / 2 - GROSOR_CHAPA / 2)]}>
+        <boxGeometry args={[pilarW, alto, GROSOR_CHAPA]} />
       </mesh>
-      {/* Perforaciones */}
       {perfs.map((y, i) => (
-        <mesh key={i} material={perfMat} position={[0, y, dirZ * (PILAR_D / 2 + 0.0002)]}>
+        <mesh key={i} material={perfMat} position={[0, y, dirZ * (pilarD / 2 + 0.0002)]}>
           <boxGeometry args={[PERF_W, PERF_H, GROSOR_CHAPA + 0.001]} />
         </mesh>
       ))}
@@ -82,16 +85,15 @@ function Pilar({ posX, posZ, dirX, dirZ, alto, mats }) {
   );
 }
 
-// ─── Estante ──────────────────────────────────────────────────────────────────
-function Estante({ posY, profundidad, mats }) {
+// ─── Estante — refuerzos según kg ─────────────────────────────────────────────
+function Estante({ posY, profundidad, pilarW, pilarD, refuerzos, mats }) {
   const { grafito, estanteSup } = mats;
 
-  const largo = ANCHO - PILAR_W * 2;
-  const prof  = profundidad - PILAR_D * 2;
+  const largo = ANCHO - pilarW * 2;
+  const prof  = profundidad - pilarD * 2;
 
   return (
     <group position={[0, posY, 0]}>
-
       {/* Superficie plana */}
       <mesh material={estanteSup} castShadow receiveShadow position={[0, ESTANTE_T / 2, 0]}>
         <boxGeometry args={[largo, ESTANTE_T, prof]} />
@@ -101,45 +103,49 @@ function Estante({ posY, profundidad, mats }) {
       <mesh material={grafito} castShadow position={[0, -(LABIO_H / 2), -(prof / 2 + LABIO_T / 2)]}>
         <boxGeometry args={[largo, LABIO_H, LABIO_T]} />
       </mesh>
-
       {/* Labio trasero */}
       <mesh material={grafito} castShadow position={[0, -(LABIO_H / 2), (prof / 2 + LABIO_T / 2)]}>
         <boxGeometry args={[largo, LABIO_H, LABIO_T]} />
       </mesh>
 
       {/* Barra delantera */}
-      <mesh material={grafito} castShadow position={[0, -(BARRA_H / 2), -(prof / 2 + PILAR_D / 2 - BARRA_T / 2)]}>
+      <mesh material={grafito} castShadow position={[0, -(BARRA_H / 2), -(prof / 2 + pilarD / 2 - BARRA_T / 2)]}>
         <boxGeometry args={[largo, BARRA_H, BARRA_T]} />
       </mesh>
-      
       {/* Barra trasera */}
-      <mesh material={grafito} castShadow position={[0, -(BARRA_H / 2), (prof / 2 + PILAR_D / 2 - BARRA_T / 2)]}>
+      <mesh material={grafito} castShadow position={[0, -(BARRA_H / 2), (prof / 2 + pilarD / 2 - BARRA_T / 2)]}>
         <boxGeometry args={[largo, BARRA_H, BARRA_T]} />
       </mesh>
 
-      {/* ── ¡NUEVO!: Refuerzo central (nervio) debajo del estante ── */}
-      <mesh material={grafito} castShadow position={[0, -(REFUERZO_H / 2), 0]}>
-        <boxGeometry args={[largo, REFUERZO_H, REFUERZO_T]} />
-      </mesh>
-
+      {/* Refuerzos centrales (0, 1 o 2 según kg) */}
+      {refuerzos >= 1 && (
+        <mesh material={grafito} castShadow position={[0, -(REFUERZO_H / 2), refuerzos === 2 ? -prof * 0.17 : 0]}>
+          <boxGeometry args={[largo, REFUERZO_H, REFUERZO_T]} />
+        </mesh>
+      )}
+      {refuerzos >= 2 && (
+        <mesh material={grafito} castShadow position={[0, -(REFUERZO_H / 2), prof * 0.17]}>
+          <boxGeometry args={[largo, REFUERZO_H, REFUERZO_T]} />
+        </mesh>
+      )}
     </group>
   );
 }
 
 // ─── Fondo metálico ───────────────────────────────────────────────────────────
-function PanelFondo({ alto, profundidad, mats }) {
-  const largo = ANCHO - PILAR_W * 2;
-  const prof  = profundidad - PILAR_D * 2;
+function PanelFondo({ alto, profundidad, pilarW, pilarD, mats }) {
+  const largo = ANCHO - pilarW * 2;
+  const prof  = profundidad - pilarD * 2;
   return (
-    <mesh material={mats.grafito} receiveShadow position={[0, alto / 2, prof / 2 + PILAR_D - 0.003]}>
+    <mesh material={mats.grafito} receiveShadow position={[0, alto / 2, prof / 2 + pilarD - 0.003]}>
       <boxGeometry args={[largo, alto - ESTANTE_T * 2, 0.004]} />
     </mesh>
   );
 }
 
 // ─── Laterales metálicos ──────────────────────────────────────────────────────
-function PanelLateral({ posX, alto, profundidad, mats }) {
-  const prof = profundidad - PILAR_D * 2;
+function PanelLateral({ posX, alto, profundidad, pilarD, mats }) {
+  const prof = profundidad - pilarD * 2;
   return (
     <mesh material={mats.grafito} castShadow receiveShadow position={[posX, alto / 2, 0]}>
       <boxGeometry args={[0.004, alto - ESTANTE_T * 2, prof]} />
@@ -161,6 +167,13 @@ function Regaton({ posX, posZ, mat }) {
   );
 }
 
+// ─── Determinar refuerzos por kg ──────────────────────────────────────────────
+function getRefuerzos(kgEstante) {
+  if (kgEstante >= 100) return 2;
+  if (kgEstante >= 65)  return 1;
+  return 0;  // 50kg: sin refuerzo
+}
+
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function Estanteria3D({ config }) {
   const mats = useMats();
@@ -169,8 +182,14 @@ export default function Estanteria3D({ config }) {
   const prof = config.profundidad / 100;
   const n    = config.estantes;
 
-  const px = ANCHO / 2 - PILAR_W / 2;
-  const pz = prof  / 2 - PILAR_D / 2;
+  // Parante según tipo
+  const paranteKey = config.parante || 'fino';
+  const { w: pilarW, d: pilarD } = PARANTE_DIMS[paranteKey] || PARANTE_DIMS.fino;
+
+  const px = ANCHO / 2 - pilarW / 2;
+  const pz = prof  / 2 - pilarD / 2;
+
+  const refuerzos = getRefuerzos(config.kgEstante || 50);
 
   const posicionesY = useMemo(() => {
     const techo  = alto - ESTANTE_T;
@@ -180,26 +199,25 @@ export default function Estanteria3D({ config }) {
 
   return (
     <group>
-
       {/* 4 pilares */}
-      <Pilar posX={-px} posZ={-pz} dirX={-1} dirZ={-1} alto={alto} mats={mats} />
-      <Pilar posX={ px} posZ={-pz} dirX={ 1} dirZ={-1} alto={alto} mats={mats} />
-      <Pilar posX={-px} posZ={ pz} dirX={-1} dirZ={ 1} alto={alto} mats={mats} />
-      <Pilar posX={ px} posZ={ pz} dirX={ 1} dirZ={ 1} alto={alto} mats={mats} />
+      <Pilar posX={-px} posZ={-pz} dirX={-1} dirZ={-1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
+      <Pilar posX={ px} posZ={-pz} dirX={ 1} dirZ={-1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
+      <Pilar posX={-px} posZ={ pz} dirX={-1} dirZ={ 1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
+      <Pilar posX={ px} posZ={ pz} dirX={ 1} dirZ={ 1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
 
       {/* Estantes */}
       {posicionesY.map((y, i) => (
-        <Estante key={i} posY={y} profundidad={prof} mats={mats} />
+        <Estante key={i} posY={y} profundidad={prof} pilarW={pilarW} pilarD={pilarD} refuerzos={refuerzos} mats={mats} />
       ))}
 
       {/* Accesorios */}
       {config.conFondo && (
-        <PanelFondo alto={alto} profundidad={prof} mats={mats} />
+        <PanelFondo alto={alto} profundidad={prof} pilarW={pilarW} pilarD={pilarD} mats={mats} />
       )}
       {config.conLaterales && (
         <>
-          <PanelLateral posX={-(ANCHO / 2 - PILAR_W - 0.003)} alto={alto} profundidad={prof} mats={mats} />
-          <PanelLateral posX={ (ANCHO / 2 - PILAR_W - 0.003)} alto={alto} profundidad={prof} mats={mats} />
+          <PanelLateral posX={-(ANCHO / 2 - pilarW - 0.003)} alto={alto} profundidad={prof} pilarD={pilarD} mats={mats} />
+          <PanelLateral posX={ (ANCHO / 2 - pilarW - 0.003)} alto={alto} profundidad={prof} pilarD={pilarD} mats={mats} />
         </>
       )}
 
@@ -212,7 +230,6 @@ export default function Estanteria3D({ config }) {
           <Regaton posX={ px} posZ={ pz} mat={mats.grafito} />
         </>
       )}
-
     </group>
   );
 }
