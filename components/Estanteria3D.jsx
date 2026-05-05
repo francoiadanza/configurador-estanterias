@@ -1,96 +1,108 @@
-// render3d/Estanteria3D.jsx
-// Origen: https://github.com/francoiadanza/configurador-estanterias
-// Adaptado para Mundo Estanterías — parante variable + refuerzos por kg
+// components/Estanteria3D.jsx
 import { useMemo } from 'react';
 import * as THREE from 'three';
+import { useGLTF } from '@react-three/drei';
 
 // ─── Dimensiones físicas FIJAS (metros) ──────────────────────────────────────
 const ANCHO         = 0.90;
-const GROSOR_CHAPA  = 0.0025;
 const ESTANTE_T     = 0.014;
 const LABIO_H       = 0.028;
 const LABIO_T       = 0.005;
 const BARRA_H       = 0.022;
 const BARRA_T       = 0.012;
-const PERF_H        = 0.012;
-const PERF_W        = 0.006;
-const PERF_PASO     = 0.040;
-
-// Refuerzo central debajo del estante
 const REFUERZO_H    = 0.015;
 const REFUERZO_T    = 0.030;
 
 // Parante sizes por tipo (metros)
 const PARANTE_DIMS = {
-  fino:        { w: 0.040, d: 0.040 },
-  grueso:      { w: 0.050, d: 0.050 },
-  industrial:  { w: 0.070, d: 0.070 },
+  fino:       { w: 0.040, d: 0.040 },
+  grueso:     { w: 0.050, d: 0.050 },
+  industrial: { w: 0.070, d: 0.070 },
 };
+
+// ─── Ajuste manual de los pilares GLB ────────────────────────────────────────
+// Modificá estos valores para mover / rotar los pilares hasta que encajen
+const PILAR_OFFSET_X  = -0.040;  // desplazamiento lateral   (+ = derecha, - = izquierda)
+const PILAR_OFFSET_Y  =  0.000;  // desplazamiento vertical  (+ = arriba,  - = abajo)
+const PILAR_OFFSET_Z  =  0.000;  // desplazamiento en fondo  (+ = atrás,   - = adelante)
+//              delantera-izq  delantera-der  trasera-izq  trasera-der
+const ROT_FL  =  180;          // dirX=-1  dirZ=-1
+const ROT_FR  =  180;          // dirX=+1  dirZ=-1
+const ROT_BL  =   90;          // dirX=-1  dirZ=+1
+const ROT_BR  =   90;          // dirX=+1  dirZ=+1
 
 // ─── Materiales ───────────────────────────────────────────────────────────────
 function useMats() {
   return useMemo(() => {
     const grafito = new THREE.MeshStandardMaterial({
-      color:           new THREE.Color('#525a56'),
-      metalness:       0.92,
-      roughness:       0.22,
+      color:           new THREE.Color('#8a9198'),
+      metalness:       0.90,
+      roughness:       0.25,
       envMapIntensity: 1.5,
     });
     const estanteSup = new THREE.MeshStandardMaterial({
-      color:           new THREE.Color('#464d58'),
-      metalness:       0.85,
-      roughness:       0.30,
+      color:           new THREE.Color('#8a9198'),
+      metalness:       0.90,
+      roughness:       0.25,
       envMapIntensity: 1.2,
     });
     const perfMat = new THREE.MeshStandardMaterial({
-      color:    new THREE.Color('#1a1d22'),
-      metalness:0.20,
-      roughness:0.85,
+      color:     new THREE.Color('#1a1d22'),
+      metalness: 0.20,
+      roughness: 0.85,
     });
     return { grafito, estanteSup, perfMat };
   }, []);
 }
 
-// ─── Pilar individual ─────────────────────────────────────────────────────────
-function Pilar({ posX, posZ, dirX, dirZ, alto, pilarW, pilarD, mats }) {
-  const { grafito, perfMat } = mats;
+// ─── Pilar individual (modelo GLB) ───────────────────────────────────────────
+function Pilar({ posX, posZ, dirX, rot, alto }) {
+  const modelPath = alto > 2.1 ? '/models/barra233.glb' : '/models/barra200.glb';
+  const { scene } = useGLTF(modelPath);
 
-  const perfs = useMemo(() => {
-    const arr = [];
-    let y = PERF_PASO;
-    while (y < alto - PERF_PASO * 0.5) {
-      arr.push(y);
-      y += PERF_PASO;
-    }
-    return arr;
-  }, [alto]);
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone(true);
+
+    clone.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(clone);
+
+    clone.position.set(
+      -(box.min.x + box.max.x) / 2,
+      -box.min.y,
+      -(box.min.z + box.max.z) / 2
+    );
+
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.material = child.material.clone();
+        child.material.color.set('#8a9198');
+        child.material.metalness = 0.90;
+        child.material.roughness = 0.25;
+        child.material.side = THREE.DoubleSide;
+      }
+    });
+    return clone;
+  }, [scene]);
 
   return (
-    <group position={[posX, 0, posZ]}>
-      <mesh material={grafito} castShadow receiveShadow position={[0, alto / 2, dirZ * (pilarD / 2 - GROSOR_CHAPA / 2)]}>
-        <boxGeometry args={[pilarW, alto, GROSOR_CHAPA]} />
-      </mesh>
-      <mesh material={grafito} castShadow receiveShadow position={[dirX * (pilarW / 2 - GROSOR_CHAPA / 2), alto / 2, 0]}>
-        <boxGeometry args={[GROSOR_CHAPA, alto, pilarD]} />
-      </mesh>
-      <mesh material={grafito} castShadow receiveShadow position={[0, alto / 2, -dirZ * (pilarD / 2 - GROSOR_CHAPA / 2)]}>
-        <boxGeometry args={[pilarW, alto, GROSOR_CHAPA]} />
-      </mesh>
-      {perfs.map((y, i) => (
-        <mesh key={i} material={perfMat} position={[0, y, dirZ * (pilarD / 2 + 0.0002)]}>
-          <boxGeometry args={[PERF_W, PERF_H, GROSOR_CHAPA + 0.001]} />
-        </mesh>
-      ))}
+    <group position={[posX + PILAR_OFFSET_X * dirX, PILAR_OFFSET_Y, posZ + PILAR_OFFSET_Z]} scale={[dirX, 1, 1]}>
+      <primitive object={clonedScene} rotation={[0, (rot * Math.PI) / 180, 0]} />
     </group>
   );
 }
 
-// ─── Estante — refuerzos según kg ─────────────────────────────────────────────
-function Estante({ posY, profundidad, pilarW, pilarD, refuerzos, mats }) {
+useGLTF.preload('/models/barra200.glb');
+useGLTF.preload('/models/barra233.glb');
+
+// ─── Estante ──────────────────────────────────────────────────────────────────
+function Estante({ posY, profundidad, pilarW, pilarD, kgEstante, mats }) {
   const { grafito, estanteSup } = mats;
 
-  const largo = ANCHO - pilarW * 2;
-  const prof  = profundidad - pilarD * 2;
+  const largo     = ANCHO - pilarW * 2;
+  const prof      = profundidad - pilarD * 2;
+  const refuerzos = kgEstante <= 50 ? 1 : 2;
 
   return (
     <group position={[0, posY, 0]}>
@@ -117,17 +129,16 @@ function Estante({ posY, profundidad, pilarW, pilarD, refuerzos, mats }) {
         <boxGeometry args={[largo, BARRA_H, BARRA_T]} />
       </mesh>
 
-      {/* Refuerzos centrales (0, 1 o 2 según kg) */}
-      {refuerzos >= 1 && (
-        <mesh material={grafito} castShadow position={[0, -(REFUERZO_H / 2), refuerzos === 2 ? -prof * 0.17 : 0]}>
-          <boxGeometry args={[largo, REFUERZO_H, REFUERZO_T]} />
-        </mesh>
-      )}
-      {refuerzos >= 2 && (
-        <mesh material={grafito} castShadow position={[0, -(REFUERZO_H / 2), prof * 0.17]}>
-          <boxGeometry args={[largo, REFUERZO_H, REFUERZO_T]} />
-        </mesh>
-      )}
+      {/* Refuerzos: corren de lado a lado (eje X), distribuidos en profundidad (eje Z) */}
+      {Array.from({ length: refuerzos }, (_, i) => {
+        const paso = prof / (refuerzos + 1);
+        const z = -prof / 2 + paso * (i + 1);
+        return (
+          <mesh key={i} material={grafito} castShadow position={[0, -(REFUERZO_H / 2), z]}>
+            <boxGeometry args={[largo, REFUERZO_H, REFUERZO_T]} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
@@ -167,13 +178,6 @@ function Regaton({ posX, posZ, mat }) {
   );
 }
 
-// ─── Determinar refuerzos por kg ──────────────────────────────────────────────
-function getRefuerzos(kgEstante) {
-  if (kgEstante >= 100) return 2;
-  if (kgEstante >= 65)  return 1;
-  return 0;  // 50kg: sin refuerzo
-}
-
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function Estanteria3D({ config }) {
   const mats = useMats();
@@ -182,14 +186,11 @@ export default function Estanteria3D({ config }) {
   const prof = config.profundidad / 100;
   const n    = config.estantes;
 
-  // Parante según tipo
-  const paranteKey = config.parante || 'fino';
+  const paranteKey = (config.parante || 'fino').toLowerCase();
   const { w: pilarW, d: pilarD } = PARANTE_DIMS[paranteKey] || PARANTE_DIMS.fino;
 
   const px = ANCHO / 2 - pilarW / 2;
   const pz = prof  / 2 - pilarD / 2;
-
-  const refuerzos = getRefuerzos(config.kgEstante || 50);
 
   const posicionesY = useMemo(() => {
     const techo  = alto - ESTANTE_T;
@@ -200,14 +201,14 @@ export default function Estanteria3D({ config }) {
   return (
     <group>
       {/* 4 pilares */}
-      <Pilar posX={-px} posZ={-pz} dirX={-1} dirZ={-1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
-      <Pilar posX={ px} posZ={-pz} dirX={ 1} dirZ={-1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
-      <Pilar posX={-px} posZ={ pz} dirX={-1} dirZ={ 1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
-      <Pilar posX={ px} posZ={ pz} dirX={ 1} dirZ={ 1} alto={alto} pilarW={pilarW} pilarD={pilarD} mats={mats} />
+      <Pilar posX={-px} posZ={-pz} dirX={-1} rot={ROT_FL} alto={alto} />
+      <Pilar posX={ px} posZ={-pz} dirX={ 1} rot={ROT_FR} alto={alto} />
+      <Pilar posX={-px} posZ={ pz} dirX={-1} rot={ROT_BL} alto={alto} />
+      <Pilar posX={ px} posZ={ pz} dirX={ 1} rot={ROT_BR} alto={alto} />
 
       {/* Estantes */}
       {posicionesY.map((y, i) => (
-        <Estante key={i} posY={y} profundidad={prof} pilarW={pilarW} pilarD={pilarD} refuerzos={refuerzos} mats={mats} />
+        <Estante key={i} posY={y} profundidad={prof} pilarW={pilarW} pilarD={pilarD} kgEstante={config.kgEstante} mats={mats} />
       ))}
 
       {/* Accesorios */}
